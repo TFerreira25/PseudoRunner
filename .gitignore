@@ -1,0 +1,18 @@
+# Ignorar pasta de exercícios e temporários
+exercises/
+exercises/*
+
+# Ficheiros Python compilados
+__pycache__/
+*.pyc
+*.pyo
+
+# Ficheiros de logs ou backups
+*.log
+*.bak
+*.tmp
+
+# Configurações locais e ambientes virtuais
+.env
+venv/
+.env/
