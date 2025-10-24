@@ -1,6 +1,30 @@
 import sys
 import re
 
+# Error mapping for user-friendly messages
+ERROR_MAP = {
+    "Variável usada antes de ser definida.": "Variable used before being defined.",
+    "endwhile sem while correspondente.": "'endwhile' without matching 'while'.",
+    "endfor sem for correspondente.": "'endfor' without matching 'for'.",
+    "while sem fim correspondente (endwhile/endfor).": "'while' block missing 'endwhile'.",
+    "for sem fim correspondente (endwhile/endfor).": "'for' block missing 'endfor'.",
+    "Linha inválida (Set)": "Invalid 'set' statement.",
+    "Instrução desconhecida": "Unknown instruction.",
+    "Sintaxe IF inválida": "Invalid IF syntax.",
+    "else if sem IF correspondente.": "'else if' without matching 'if'.",
+    "Sintaxe ELSE IF inválida": "Invalid ELSE IF syntax.",
+    "else sem IF correspondente.": "'else' without matching 'if'.",
+    "endif sem IF correspondente.": "'endif' without matching 'if'.",
+    "Sintaxe WHILE inválida": "Invalid WHILE syntax.",
+    "Sintaxe FOR inválida": "Invalid FOR syntax."
+}
+
+def map_error_message(msg):
+    for key in ERROR_MAP:
+        if key in msg:
+            return ERROR_MAP[key] + f" (Details: {msg})"
+    return msg
+
 # -------------------------
 # Helpers
 # -------------------------
@@ -75,7 +99,7 @@ def to_python_expr(expr, variables):
                 py_expr += f" {t} "
             else:
                 if t not in variables:
-                    raise Exception(f"Variável '{t}' usada antes de ser definida.")
+                    raise Exception(map_error_message(f"Variável '{t}' usada antes de ser definida."))
                 py_expr += str(variables[t])
         else:
             py_expr += t
@@ -108,17 +132,17 @@ class Interpreter:
                 pass
             elif line_up == "endwhile":
                 if not stack_tmp or stack_tmp[-1][0] != "while":
-                    raise Exception("endwhile sem while correspondente.")
+                    raise Exception(map_error_message("endwhile sem while correspondente."))
                 _, start_idx = stack_tmp.pop()
                 mapping[start_idx] = idx
             elif line_up == "endfor":
                 if not stack_tmp or stack_tmp[-1][0] != "for":
-                    raise Exception("endfor sem for correspondente.")
+                    raise Exception(map_error_message("endfor sem for correspondente."))
                 _, start_idx = stack_tmp.pop()
                 mapping[start_idx] = idx
 
         for kind, start in stack_tmp:
-            raise Exception(f"{kind} sem fim correspondente (endwhile/endfor). Linha {start+1}.")
+            raise Exception(map_error_message(f"{kind} sem fim correspondente (endwhile/endfor). Linha {start+1}."))
 
         return mapping
 
@@ -126,7 +150,13 @@ class Interpreter:
         while self.ip < len(self.lines):
             raw = self.lines[self.ip].strip()
 
+            # Ignore empty lines
             if raw == "":
+                self.ip += 1
+                continue
+
+            # Ignore comments (# or //)
+            if raw.startswith("#") or raw.startswith("//"):
                 self.ip += 1
                 continue
 
@@ -180,7 +210,7 @@ class Interpreter:
             if lower.startswith("set "):
                 m = re.match(r"set\s+([A-Za-z_]\w*)\s+to\s+(.+)", raw, re.IGNORECASE)
                 if not m:
-                    raise Exception(f"Linha inválida (Set): {raw}")
+                    raise Exception(map_error_message(f"Linha inválida (Set): {raw}"))
                 varname = m.group(1)
                 expr = m.group(2)
 
@@ -227,14 +257,14 @@ class Interpreter:
                 self._handle_endfor()
                 continue
 
-            raise Exception(f"Instrução desconhecida na linha {self.ip+1}: {raw}")
+            raise Exception(map_error_message(f"Instrução desconhecida na linha {self.ip+1}: {raw}"))
 
     # -------------- IF / ELSE IF / ELSE / ENDIF ----------------
 
     def _handle_if(self, raw):
         m = re.match(r"if\s+(.+?)\s+then\s*$", raw, re.IGNORECASE)
         if not m:
-            raise Exception(f"Sintaxe IF inválida: {raw}")
+            raise Exception(map_error_message(f"Sintaxe IF inválida: {raw}"))
 
         cond_text = m.group(1)
         cond_py = to_python_expr(cond_text, self.vars)
@@ -249,12 +279,12 @@ class Interpreter:
 
     def _handle_else_if(self, raw):
         if not self.stack or self.stack[-1][0] != "if":
-            raise Exception("else if sem IF correspondente.")
+            raise Exception(map_error_message("else if sem IF correspondente."))
         block = self.stack[-1]
 
         m = re.match(r"else\s+if\s+(.+?)\s+then\s*$", raw, re.IGNORECASE)
         if not m:
-            raise Exception(f"Sintaxe ELSE IF inválida: {raw}")
+            raise Exception(map_error_message(f"Sintaxe ELSE IF inválida: {raw}"))
 
         cond_text = m.group(1)
         cond_py = to_python_expr(cond_text, self.vars)
@@ -273,7 +303,7 @@ class Interpreter:
 
     def _handle_else(self):
         if not self.stack or self.stack[-1][0] != "if":
-            raise Exception("else sem IF correspondente.")
+            raise Exception(map_error_message("else sem IF correspondente."))
         block = self.stack[-1]
 
         if block[1] is True:
@@ -289,7 +319,7 @@ class Interpreter:
 
     def _handle_endif(self):
         if not self.stack or self.stack[-1][0] != "if":
-            raise Exception("endif sem IF correspondente.")
+            raise Exception(map_error_message("endif sem IF correspondente."))
         self.stack.pop()
         self.ip += 1
 
@@ -313,7 +343,7 @@ class Interpreter:
         if not m:
             m2 = re.match(r"while\s+(.+?)\s*$", raw, re.IGNORECASE)
             if not m2:
-                raise Exception(f"Sintaxe WHILE inválida: {raw}")
+                raise Exception(map_error_message(f"Sintaxe WHILE inválida: {raw}"))
             cond_text = m2.group(1)
         else:
             cond_text = m.group(1)
@@ -351,7 +381,7 @@ class Interpreter:
             re.IGNORECASE
         )
         if not m:
-            raise Exception(f"Sintaxe FOR inválida: {raw}")
+            raise Exception(map_error_message(f"Sintaxe FOR inválida: {raw}"))
 
         varname = m.group(1)
         start_expr = m.group(2)
@@ -373,7 +403,7 @@ class Interpreter:
 
     def _handle_endfor(self):
         if not self.stack or self.stack[-1][0] != "for":
-            raise Exception("endfor sem for correspondente.")
+            raise Exception(map_error_message("endfor sem for correspondente."))
 
         kind, for_line, varname, current_val, end_val = self.stack[-1]
 
