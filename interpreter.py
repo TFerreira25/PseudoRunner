@@ -41,11 +41,18 @@ def tokenize_display_args(s):
     args = []
     current = ""
     inside_quotes = False
+    bracket_level = 0
     for ch in s:
         if ch == '"':
             inside_quotes = not inside_quotes
             current += ch
-        elif ch == ',' and not inside_quotes:
+        elif ch == '[':
+            bracket_level += 1
+            current += ch
+        elif ch == ']':
+            bracket_level -= 1
+            current += ch
+        elif ch == ',' and not inside_quotes and bracket_level == 0:
             args.append(current.strip())
             current = ""
         else:
@@ -55,7 +62,25 @@ def tokenize_display_args(s):
     return args
 
 def to_python_expr(expr, variables):
+
     rep = expr.strip()
+
+    # Pre-process array accesses: replace var[expr] with their value
+    def array_access_replacer(match):
+        varname = match.group(1)
+        idx_expr = match.group(2)
+        idx_val = eval(to_python_expr(idx_expr, variables), {"__builtins__": {}})
+        if varname not in variables:
+            raise Exception(map_error_message(f"Variável '{varname}' usada antes de ser definida."))
+        arr = variables[varname]
+        if not isinstance(arr, list):
+            raise Exception(f"'{varname}' is not an array.")
+        if not isinstance(idx_val, int) or idx_val < 0 or idx_val >= len(arr):
+            raise Exception(f"Index {idx_val} out of bounds for array '{varname}'.")
+        return str(arr[idx_val])
+
+    # This regex matches var[expr] where expr can be anything except a closing bracket
+    rep = re.sub(r'([A-Za-z_]\w*)\[([^\]]+)\]', array_access_replacer, rep)
 
     rep = re.sub(r"\b-gt\b", ">", rep)
     rep = re.sub(r"\bgt\b", ">", rep)
@@ -93,16 +118,49 @@ def to_python_expr(expr, variables):
     tokens = re.findall(r'"[^"]*"|\(|\)|[A-Za-z_]\w*|\d+\.\d+|\d+|==|>=|<=|!=|>|<|%|\+|-|\*|/|and|or', rep)
 
     py_expr = ""
-    for t in tokens:
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        # Array access: var[index] where index can be an expression
         if re.match(r'^[A-Za-z_]\w*$', t):
             if t in ["and", "or"]:
                 py_expr += f" {t} "
+            elif i+1 < len(tokens) and tokens[i+1] == "[":
+                # Find matching closing bracket
+                bracket_count = 1
+                idx_tokens = []
+                j = i+2
+                while j < len(tokens):
+                    if tokens[j] == "[":
+                        bracket_count += 1
+                    elif tokens[j] == "]":
+                        bracket_count -= 1
+                        if bracket_count == 0:
+                            break
+                    idx_tokens.append(tokens[j])
+                    j += 1
+                if bracket_count != 0:
+                    raise Exception(f"Unmatched [ in array access for {t}")
+                idx_expr = "".join(idx_tokens)
+                # Debug: print('Array index expr:', idx_expr)
+                idx_val = eval(to_python_expr(idx_expr, variables), {"__builtins__": {}})
+                if t not in variables:
+                    raise Exception(map_error_message(f"Variável '{t}' usada antes de ser definida."))
+                arr = variables[t]
+                if not isinstance(arr, list):
+                    raise Exception(f"'{t}' is not an array.")
+                if not isinstance(idx_val, int) or idx_val < 0 or idx_val >= len(arr):
+                    raise Exception(f"Index {idx_val} out of bounds for array '{t}'.")
+                py_expr += str(arr[idx_val])
+                i = j+1
+                continue
             else:
                 if t not in variables:
                     raise Exception(map_error_message(f"Variável '{t}' usada antes de ser definida."))
                 py_expr += str(variables[t])
         else:
             py_expr += t
+        i += 1
     return py_expr
 
 # -------------------------
@@ -198,6 +256,31 @@ class Interpreter:
                 for part in parts:
                     if part.startswith('"') and part.endswith('"'):
                         output_bits.append(part[1:-1])
+                    elif re.match(r'^[A-Za-z_]\w*$', part):
+                        # Display variable or array
+                        if part in self.vars:
+                            val = self.vars[part]
+                            output_bits.append(str(val))
+                        else:
+                            output_bits.append(f"[undefined: {part}]")
+                    elif re.match(r'^[A-Za-z_]\w*\[.+\]$', part):
+                        # Display array element like arr[i]
+                        m_elem = re.match(r'^([A-Za-z_]\w*)\[(.+)\]$', part)
+                        if m_elem:
+                            varname = m_elem.group(1)
+                            idx_expr = m_elem.group(2)
+                            idx_py = to_python_expr(idx_expr, self.vars)
+                            idx = eval(idx_py, {"__builtins__": {}})
+                            if varname in self.vars and isinstance(self.vars[varname], list):
+                                arr = self.vars[varname]
+                                if isinstance(idx, int) and 0 <= idx < len(arr):
+                                    output_bits.append(str(arr[idx]))
+                                else:
+                                    output_bits.append(f"[out of bounds: {varname}[{idx}]]")
+                            else:
+                                output_bits.append(f"[not array: {varname}]")
+                        else:
+                            output_bits.append(f"[invalid array syntax: {part}]")
                     else:
                         expr_py = to_python_expr(part, self.vars)
                         val = eval(expr_py, {"__builtins__": {}})
@@ -208,6 +291,44 @@ class Interpreter:
                 continue
 
             if lower.startswith("set "):
+                # Array element assignment: set arr[index] to value (index can be variable or expression)
+                m_elem = re.match(r"set\s+([A-Za-z_]\w*)\[(.+)\]\s+to\s+(.+)", raw, re.IGNORECASE)
+                if m_elem:
+                    varname = m_elem.group(1)
+                    idx_expr = m_elem.group(2)
+                    expr = m_elem.group(3)
+                    idx_py = to_python_expr(idx_expr, self.vars)
+                    idx = eval(idx_py, {"__builtins__": {}})
+                    expr_py = to_python_expr(expr, self.vars)
+                    val = eval(expr_py, {"__builtins__": {}})
+                    if varname not in self.vars:
+                        raise Exception(map_error_message(f"Variável '{varname}' usada antes de ser definida."))
+                    arr = self.vars[varname]
+                    if not isinstance(arr, list):
+                        raise Exception(f"'{varname}' is not an array.")
+                    if not isinstance(idx, int) or idx < 0 or idx >= len(arr):
+                        raise Exception(f"Index {idx} out of bounds for array '{varname}'.")
+                    arr[idx] = val
+                    self.ip += 1
+                    continue
+                # Array declaration: set arr to [1, 2, 3]
+                m_arr = re.match(r"set\s+([A-Za-z_]\w*)\s+to\s+\[(.*)\]", raw, re.IGNORECASE)
+                if m_arr:
+                    varname = m_arr.group(1)
+                    items = m_arr.group(2)
+                    # Split items by comma, handle numbers and strings
+                    arr = []
+                    for item in re.split(r",", items):
+                        item = item.strip()
+                        if item.startswith('"') and item.endswith('"'):
+                            arr.append(item[1:-1])
+                        else:
+                            num = is_number(item)
+                            arr.append(num if num is not None else item)
+                    self.vars[varname] = arr
+                    self.ip += 1
+                    continue
+                # Regular variable assignment
                 m = re.match(r"set\s+([A-Za-z_]\w*)\s+to\s+(.+)", raw, re.IGNORECASE)
                 if not m:
                     raise Exception(map_error_message(f"Linha inválida (Set): {raw}"))
