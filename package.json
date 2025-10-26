@@ -1,0 +1,24 @@
+{
+  "name": "pseudorunner",
+  "version": "1.0.0",
+  "description": "begin declação de variaveis",
+  "main": "interpreter.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TFerreira25/PseudoRunner.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/TFerreira25/PseudoRunner/issues"
+  },
+  "homepage": "https://github.com/TFerreira25/PseudoRunner#readme",
+  "dependencies": {
+    "readline-sync": "^1.4.10"
+  }
+}
