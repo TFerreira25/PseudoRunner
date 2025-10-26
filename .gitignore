@@ -3,11 +3,6 @@ exercises/
 exercises/*
 .vscode/
 
-# Ficheiros Python compilados
-__pycache__/
-*.pyc
-*.pyo
-
 # Ficheiros de logs ou backups
 *.log
 *.bak
