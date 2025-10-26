@@ -2,7 +2,7 @@
 
 ### Executable Pseudocode Interpreter 🔥
 
-![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=node.js)
+![Node.js](https://img.shields.io/badge/Node.js-24%2B-green?logo=node.js)
 ![Status](https://img.shields.io/badge/Status-Active-success)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Made in Portugal](https://img.shields.io/badge/Made%20in-Portugal-red?style=flat&logo=portugal)
