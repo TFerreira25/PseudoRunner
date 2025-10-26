@@ -34,7 +34,7 @@ It executes simple pseudocode instructions such as `Begin`, `If`, `While`, `Disp
 
 ### Requirements
 
-- **Node.js 18+**
+- **Node.js 24+**
 - **npm**
 
 Check if Node.js is installed:
