@@ -1,11 +1,8 @@
 # Ignorar pasta de exercícios e temporários
 exercises/
 exercises/*
-
-# Ficheiros Python compilados
-__pycache__/
-*.pyc
-*.pyo
+.vscode/
+node_modules/
 
 # Ficheiros de logs ou backups
 *.log
