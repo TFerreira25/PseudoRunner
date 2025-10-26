@@ -2,6 +2,7 @@
 exercises/
 exercises/*
 .vscode/
+node_modules/
 
 # Ficheiros de logs ou backups
 *.log
