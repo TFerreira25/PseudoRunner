@@ -1,6 +1,7 @@
 # Ignorar pasta de exercícios e temporários
 exercises/
 exercises/*
+.vscode/
 
 # Ficheiros Python compilados
 __pycache__/
